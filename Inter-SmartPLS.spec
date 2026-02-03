@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_all
 import sys
 import os
 
@@ -8,16 +8,26 @@ block_cipher = None
 # validasi path icon
 icon_path = os.path.abspath('icon.ico')
 
-# collect themes/assets for customtkinter
+# Initialize lists
 datas = [('icon.ico', '.')]
-datas += collect_data_files('customtkinter')
+binaries = []
+hiddenimports = []
+
+# Collect all resources for critical packages
+packages = ['customtkinter', 'pandas', 'openpyxl', 'docx', 'PIL']
+
+for package in packages:
+    tmp_ret = collect_all(package)
+    datas += tmp_ret[0]
+    binaries += tmp_ret[1]
+    hiddenimports += tmp_ret[2]
 
 a = Analysis(
     ['app.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
-    hiddenimports=['pandas', 'openpyxl', 'docx', 'customtkinter'],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
