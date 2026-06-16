@@ -30,4 +30,4 @@ tests/test_*.py
 
 #Input & Output
 *.xlsx
-*.doc
+*.docx
