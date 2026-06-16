@@ -520,12 +520,14 @@ class SmartPLSReader:
         vif_data = []
         q2_data = []
         path_coeffs = []
+        total_effects = []
         
         r2_df = None
         vif_df = None
         pc_df = None
         f2_df = None
         q2_df = None
+        te_df = None
         
         # 1. R Square & VIF from PLS.xlsx
         path_pls = self.find_file("PLS.xlsx")
@@ -646,6 +648,31 @@ class SmartPLSReader:
                                 'T': float(row[t_col]) if t_col and not pd.isna(row[t_col]) else 0.0,
                                 'P': float(row[p_col]) if not pd.isna(row[p_col]) else 1.0
                             })
+
+                # Total Effects
+                te_df = self.read_subtable(df, "Total Effects")
+                if te_df is None: te_df = self.read_subtable(df, "Total effects")
+                if te_df is not None:
+                    cols = te_df.columns.astype(str).tolist()
+                    def get_c(key): return next((c for c in cols if key.lower() in c.lower()), None)
+                    
+                    o_col = get_c("Original Sample")
+                    sd_col = get_c("Standard Deviation") or get_c("STDEV") or get_c("standard dev")
+                    t_col = get_c("T Statistics") or get_c("T value")
+                    p_col = get_c("P Values") or get_c("p value")
+                    
+                    if o_col and p_col:
+                        for _, row in te_df.iterrows():
+                            if pd.isna(row.iloc[0]) or str(row.iloc[0]).strip() == "": continue
+                            path_str = str(row.iloc[0])
+                            if "->" not in path_str: continue
+                            total_effects.append({
+                                'Path': path_str,
+                                'Beta': float(row[o_col]) if not pd.isna(row[o_col]) else 0.0,
+                                'STDEV': float(row[sd_col]) if sd_col and not pd.isna(row[sd_col]) else 0.0,
+                                'T': float(row[t_col]) if t_col and not pd.isna(row[t_col]) else 0.0,
+                                'P': float(row[p_col]) if not pd.isna(row[p_col]) else 1.0
+                            })
             except Exception as e:
                 print(f"Error reading Bootstrapping.xlsx: {e}")
 
@@ -742,7 +769,7 @@ class SmartPLSReader:
             except Exception as e:
                 print(f"Error reading Blindfolding.xlsx Q2: {e}")
 
-        return r2_data, f2_data, vif_data, q2_data, path_coeffs, r2_df, f2_df, vif_df, pc_df, q2_df
+        return r2_data, f2_data, vif_data, q2_data, path_coeffs, total_effects, r2_df, f2_df, vif_df, pc_df, q2_df, te_df
 
     def get_mediation(self):
         vaf_data = [] # Text list
@@ -1056,7 +1083,7 @@ class SmartPLSReader:
         
         # 1. Get measurements
         rel_data, disc_text, rel_df, fl_df, cross_df, ol_data, outer_vif_data = self.get_outer_model()
-        r2_data, f2_data, vif_data, q2_data, path_coeffs, r2_df, f2_df, vif_df, pc_df, q2_df = self.get_inner_model()
+        r2_data, f2_data, vif_data, q2_data, path_coeffs, total_effects, r2_df, f2_df, vif_df, pc_df, q2_df, te_df = self.get_inner_model()
         
         # Helper ordinal function
         def get_indonesian_ordinal(n):
@@ -1889,7 +1916,69 @@ class SmartPLSReader:
                     )
                 self.interpreter.add_text(narr)
                 
-        # 4.5. Ringkasan Temuan Penelitian
+        # 4.5. Pengujian Efek Total (Total Effects)
+        if total_effects:
+            self.interpreter.add_header("Pengujian Efek Total (Total Effects)", level=1)
+            self.interpreter.add_text(
+                "Pengujian efek total (total effects) ditujukan untuk mengevaluasi total pengaruh kumulatif dari variabel eksogen terhadap variabel endogen, "
+                "yang merupakan gabungan dari pengaruh langsung (direct effects) dan seluruh pengaruh tidak langsung (indirect effects) yang melewati variabel intervening/mediasi. "
+                "Signifikansi efek total diukur melalui kriteria nilai T-statistik > 1,96 dan p-value < 0,05."
+            )
+            
+            t_te_rows = []
+            for idx, path in enumerate(total_effects, 1):
+                p_str = path['Path']
+                beta = path['Beta']
+                stdev = path.get('STDEV', 0.0)
+                t_stat = path['T']
+                p_val = path['P']
+                is_sig = p_val <= 0.05
+                
+                p_val_str = f"{p_val:.4f}".replace('.', ',')
+                if p_val < 0.001:
+                    p_val_str = "< 0,001"
+                    
+                t_te_rows.append({
+                    'Jalur Hubungan': p_str,
+                    'Koefisien Total (O)': f"{beta:.4f}".replace('.', ','),
+                    'Standar Deviasi (STDEV)': f"{stdev:.4f}".replace('.', ',') if stdev > 0 else '-',
+                    'T-Statistik': f"{t_stat:.4f}".replace('.', ','),
+                    'P-Value': p_val_str,
+                    'Kesimpulan': 'Signifikan' if is_sig else 'Tidak Signifikan'
+                })
+            t_te_df = pd.DataFrame(t_te_rows)
+            self.interpreter.add_table(t_te_df)
+            
+            for idx, path in enumerate(total_effects, 1):
+                p_str = path['Path']
+                beta = path['Beta']
+                t_stat = path['T']
+                p_val = path['P']
+                is_sig = p_val <= 0.05
+                
+                parts = [p.strip() for p in p_str.split("->")]
+                var_from = parts[0]
+                var_to = parts[1] if len(parts) > 1 else ""
+                
+                p_val_str = f"sebesar {p_val:.4f}".replace('.', ',')
+                if p_val < 0.001:
+                    p_val_str = "< 0,001"
+                    
+                sig_label = "signifikan" if is_sig else "tidak signifikan"
+                arah_label = "positif" if beta > 0 else "negatif"
+                
+                beta_str = f"{beta:.4f}".replace('.', ',')
+                t_stat_str = f"{t_stat:.4f}".replace('.', ',')
+                
+                narr = (
+                    f"{idx}. Pengaruh efek total kumulatif dari {var_from} terhadap {var_to} menunjukkan nilai "
+                    f"koefisien sebesar {beta_str} dengan arah {arah_label}, nilai T-statistik sebesar {t_stat_str}, "
+                    f"serta p-value {p_val_str}. Hasil ini menunjukkan bahwa total pengaruh {var_from} terhadap {var_to} "
+                    f"bersifat {sig_label} secara statistik."
+                )
+                self.interpreter.add_text(narr)
+                
+        # 4.6. Ringkasan Temuan Penelitian
         self.interpreter.add_header("Ringkasan Temuan Penelitian", level=1)
         accepted_count = sum(1 for p in path_coeffs if p['P'] <= 0.05) + sum(1 for ie in self.ie_data if ie['P'] <= 0.05)
         total_hyp = len(path_coeffs) + len(self.ie_data)
