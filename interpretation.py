@@ -6,6 +6,7 @@ try:
     from docx import Document
     from docx.shared import Pt, Inches, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
     from docx.oxml.ns import qn
     from docx.oxml import OxmlElement
     DOCX_ERROR = None
@@ -14,9 +15,104 @@ except ImportError as e:
     DOCX_ERROR = str(e)
 
 class ScientificInterpreter:
+    SRMR_OMML = (
+        '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+        '<m:r><m:t>SRMR = </m:t></m:r>'
+        '<m:rad>'
+        '<m:radPr><m:degHide m:val="1"/></m:radPr>'
+        '<m:e>'
+        '<m:f>'
+        '<m:num>'
+        '<m:sSub>'
+        '<m:e><m:r><m:t>∑</m:t></m:r></m:e>'
+        '<m:sub><m:r><m:t>i&lt;j</m:t></m:r></m:sub>'
+        '</m:sSub>'
+        '<m:sSup>'
+        '<m:e>'
+        '<m:r><m:t>(</m:t></m:r>'
+        '<m:sSub><m:e><m:r><m:t>s</m:t></m:r></m:e><m:sub><m:r><m:t>ij</m:t></m:r></m:sub></m:sSub>'
+        '<m:r><m:t> - </m:t></m:r>'
+        '<m:sSub><m:e><m:r><m:t>σ</m:t></m:r></m:e><m:sub><m:r><m:t>ij</m:t></m:r></m:sub></m:sSub>'
+        '<m:r><m:t>)</m:t></m:r>'
+        '</m:e>'
+        '<m:sup><m:r><m:t>2</m:t></m:r></m:sup>'
+        '</m:sSup>'
+        '</m:num>'
+        '<m:den>'
+        '<m:r><m:t>h</m:t></m:r>'
+        '</m:den>'
+        '</m:f>'
+        '</m:e>'
+        '</m:rad>'
+        '</m:oMath>'
+    )
+    
+    HTMT_OMML = (
+        '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+        '<m:sSub>'
+        '<m:e><m:r><m:t>HTMT</m:t></m:r></m:e>'
+        '<m:sub><m:r><m:t>ij</m:t></m:r></m:sub>'
+        '</m:sSub>'
+        '<m:r><m:t> = </m:t></m:r>'
+        '<m:f>'
+        '<m:num>'
+        '<m:acc>'
+        '<m:accPr><m:chr m:val="¯"/></m:accPr>'
+        '<m:e><m:sSub><m:e><m:r><m:t>d</m:t></m:r></m:e><m:sub><m:r><m:t>ij</m:t></m:r></m:sub></m:sSub></m:e>'
+        '</m:acc>'
+        '</m:num>'
+        '<m:den>'
+        '<m:rad>'
+        '<m:radPr><m:degHide m:val="1"/></m:radPr>'
+        '<m:e>'
+        '<m:acc>'
+        '<m:accPr><m:chr m:val="¯"/></m:accPr>'
+        '<m:e><m:sSub><m:e><m:r><m:t>d</m:t></m:r></m:e><m:sub><m:r><m:t>ii</m:t></m:r></m:sub></m:sSub></m:e>'
+        '</m:acc>'
+        '<m:r><m:t> × </m:t></m:r>'
+        '<m:acc>'
+        '<m:accPr><m:chr m:val="¯"/></m:accPr>'
+        '<m:e><m:sSub><m:e><m:r><m:t>d</m:t></m:r></m:e><m:sub><m:r><m:t>jj</m:t></m:r></m:sub></m:sSub></m:e>'
+        '</m:acc>'
+        '</m:e>'
+        '</m:rad>'
+        '</m:den>'
+        '</m:f>'
+        '</m:oMath>'
+    )
+    
+    GOF_OMML = (
+        '<m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math">'
+        '<m:r><m:t>GoF = </m:t></m:r>'
+        '<m:rad>'
+        '<m:radPr><m:degHide m:val="1"/></m:radPr>'
+        '<m:e>'
+        '<m:acc>'
+        '<m:accPr><m:chr m:val="¯"/></m:accPr>'
+        '<m:e><m:r><m:t>AVE</m:t></m:r></m:e>'
+        '</m:acc>'
+        '<m:r><m:t> × </m:t></m:r>'
+        '<m:sSup>'
+        '<m:e>'
+        '<m:acc>'
+        '<m:accPr><m:chr m:val="¯"/></m:accPr>'
+        '<m:e><m:r><m:t>R</m:t></m:r></m:e>'
+        '</m:acc>'
+        '</m:e>'
+        '<m:sup><m:r><m:t>2</m:t></m:r></m:sup>'
+        '</m:sSup>'
+        '</m:e>'
+        '</m:rad>'
+        '</m:oMath>'
+    )
+
     def __init__(self):
         self.paragraphs = []
         self.analysis_context = None  # Will be set by SmartPLSReader.process()
+    
+    def add_equation(self, xml_content):
+        self.paragraphs.append({"type": "equation", "xml": xml_content})
+
     
     def set_analysis_context(self, context):
         """
@@ -24,8 +120,8 @@ class ScientificInterpreter:
         """
         self.analysis_context = context
 
-    def add_section(self, title, content):
-        self.paragraphs.append({"type": "header", "text": title})
+    def add_section(self, title, content, level=1):
+        self.paragraphs.append({"type": "header", "text": title, "level": level})
         if isinstance(content, list):
             for item in content:
                 if isinstance(item, pd.DataFrame):
@@ -35,214 +131,106 @@ class ScientificInterpreter:
         else:
             self.paragraphs.append({"type": "text", "text": str(content)})
 
+    def add_header(self, text, level=1):
+        self.paragraphs.append({"type": "header", "text": text, "level": level})
+
+    def add_text(self, text):
+        self.paragraphs.append({"type": "text", "text": str(text)})
+
     def add_table(self, df):
         self.paragraphs.append({"type": "table", "data": df})
+
     def get_table_interpretation(self, table_name):
         """
         Returns a comprehensive scientific interpretation based on table name.
         """
         table_name_lower = table_name.lower()
-        
         interpretations = {
             'path coefficients': (
-                "Tabel Path Coefficients menunjukkan koefisien jalur yang menggambarkan kekuatan dan arah hubungan langsung antara variabel laten dalam model struktural. "
-                "Koefisien jalur merupakan nilai beta terstandarisasi yang menunjukkan besarnya perubahan pada variabel endogen ketika variabel eksogen berubah satu satuan standar deviasi, dengan asumsi variabel lainnya konstan. "
-                "Nilai koefisien berkisar antara negatif satu hingga positif satu, di mana nilai positif mengindikasikan hubungan searah (peningkatan variabel eksogen diikuti peningkatan variabel endogen), "
-                "sedangkan nilai negatif menunjukkan hubungan berlawanan arah. Semakin besar nilai absolut koefisien, semakin kuat pengaruh variabel eksogen terhadap variabel endogen. "
-                "Menurut Chin (1998), koefisien jalur dengan nilai di atas 0.20 dianggap bermakna secara substansial dalam ilmu perilaku. "
-                "Namun, untuk menentukan signifikansi statistik, nilai koefisien jalur harus diuji menggunakan prosedur bootstrapping yang menghasilkan T-Statistics dan P-Values. "
-                "Hipotesis diterima jika nilai P-Value lebih kecil dari 0.05 (signifikan pada tingkat kepercayaan 95 persen) atau nilai T-Statistics lebih besar dari 1.96 untuk pengujian dua arah."
+                "Analisis koefisien jalur (path coefficients) digunakan untuk mengevaluasi arah, kekuatan, dan signifikansi hubungan antar variabel dalam model struktural. Hubungan dinyatakan signifikan secara statistik apabila nilai signifikansi p-value \u2264 0,05 atau nilai t-statistic \u2265 1,96."
             ),
             'indirect effects': (
-                "Tabel Indirect Effects menampilkan efek tidak langsung dari variabel eksogen terhadap variabel endogen melalui satu atau lebih variabel mediator. "
-                "Efek tidak langsung dihitung sebagai hasil perkalian dari koefisien jalur sepanjang jalur mediasi. "
-                "Keberadaan efek tidak langsung yang signifikan mengindikasikan bahwa variabel mediator memainkan peran penting dalam menjelaskan hubungan antara variabel eksogen dan endogen. "
-                "Signifikansi efek tidak langsung dapat diuji menggunakan interval kepercayaan bootstrap; jika interval tidak mencakup nilai nol, maka efek tidak langsung dianggap signifikan. "
-                "Pemahaman tentang efek tidak langsung penting untuk mengungkap mekanisme atau proses yang mendasari hubungan antar variabel dalam model teoritis."
+                "Analisis efek tidak langsung (indirect effects) bertujuan untuk mengidentifikasi keberadaan dan besarnya pengaruh variabel eksogen terhadap variabel endogen yang disalurkan melalui variabel mediator. Signifikansi pengaruh mediasi ini ditentukan berdasarkan metode bootstrapping."
             ),
             'total indirect effects': (
-                "Total Indirect Effects merupakan agregat atau jumlah keseluruhan efek tidak langsung dari suatu variabel terhadap variabel lainnya melalui seluruh jalur mediasi yang ada dalam model. "
-                "Ketika terdapat beberapa mediator dalam model, total efek tidak langsung menggabungkan kontribusi dari semua jalur mediasi tersebut. "
-                "Nilai ini penting untuk memahami besarnya pengaruh keseluruhan yang dimediasi, terlepas dari jalur spesifik yang dilalui. "
-                "Perbandingan antara efek langsung dan total efek tidak langsung dapat memberikan wawasan tentang seberapa besar peran mediasi dalam menjelaskan hubungan antar variabel. "
-                "Jika total efek tidak langsung lebih besar dari efek langsung, hal ini mengindikasikan bahwa mekanisme mediasi merupakan jalur utama pengaruh."
+                "Total efek tidak langsung merepresentasikan akumulasi seluruh pengaruh tidak langsung dari variabel eksogen terhadap variabel endogen melalui seluruh jalur mediasi yang ada dalam model."
             ),
             'specific indirect effects': (
-                "Specific Indirect Effects menunjukkan efek tidak langsung melalui jalur mediasi tertentu secara individual. "
-                "Berbeda dengan total indirect effects yang merupakan agregat, specific indirect effects memungkinkan peneliti untuk mengidentifikasi kontribusi unik setiap jalur mediasi. "
-                "Hal ini sangat berguna dalam model dengan multiple mediators untuk menentukan mediator mana yang memiliki peran paling signifikan. "
-                "Analisis ini mendukung pengujian hipotesis mediasi yang lebih spesifik dan terperinci sesuai dengan kerangka teoritis penelitian. "
-                "Signifikansi setiap specific indirect effect diuji secara terpisah menggunakan bootstrap confidence interval. "
-                "Perbandingan antar specific indirect effects dapat mengungkap jalur mediasi yang dominan dalam model penelitian."
+                "Efek tidak langsung spesifik menggambarkan besarnya kontribusi pengaruh tidak langsung dari variabel eksogen ke variabel endogen melalui jalur mediasi tertentu. Hal ini berguna untuk menilai peran spesifik dari masing-masing variabel mediasi secara terpisah."
             ),
             'total effects': (
-                "Total Effects merupakan penjumlahan dari efek langsung (direct effect) dan efek tidak langsung (indirect effect) suatu variabel terhadap variabel lainnya. "
-                "Total effect menggambarkan pengaruh keseluruhan atau dampak komprehensif suatu variabel eksogen terhadap variabel endogen, dengan mempertimbangkan semua jalur pengaruh yang mungkin. "
-                "Jika tidak ada variabel mediator dalam hubungan antar dua variabel, maka total effect sama dengan direct effect. "
-                "Namun, ketika mediator hadir, nilai total effect adalah penjumlahan dari direct effect dan indirect effect. "
-                "Nilai total effect yang lebih besar dibandingkan direct effect mengindikasikan adanya penguatan hubungan melalui jalur mediasi. "
-                "Sebaliknya, jika tanda positif atau negatif dari direct dan indirect effect berbeda, hal ini dapat mengindikasikan adanya efek supresi."
+                "Efek total (total effects) merupakan hasil penjumlahan dari efek langsung dan seluruh efek tidak langsung yang terjadi antar konstruk, sehingga memberikan gambaran dampak menyeluruh dari variabel eksogen terhadap variabel endogen."
             ),
             'outer loadings': (
-                "Outer Loadings (factor loadings) menunjukkan korelasi antara indikator manifest dengan konstruk latennya dalam model pengukuran reflektif. "
-                "Nilai loading merepresentasikan seberapa baik indikator tersebut merefleksikan atau mengukur konstruk yang dimaksud. "
-                "Menurut Hair et al. (2017), nilai loading di atas 0.708 mengindikasikan validitas konvergen yang baik, karena hal ini berarti konstruk menjelaskan lebih dari 50 persen varians indikator. "
-                "Indikator dengan loading antara 0.40 dan 0.70 sebaiknya dipertimbangkan untuk dihapus hanya jika penghapusan tersebut meningkatkan reliabilitas komposit atau AVE. "
-                "Indikator dengan loading di bawah 0.40 sebaiknya selalu dihapus dari model karena tidak memberikan kontribusi yang memadai terhadap konstruk. "
-                "Loading yang tinggi dan konsisten pada semua indikator suatu konstruk menunjukkan reliabilitas konsistensi internal yang baik."
+                "Evaluasi beban luar (outer loadings) digunakan untuk menilai reliabilitas indikator individual dalam model pengukuran reflektif. Nilai beban luar yang disarankan adalah lebih besar dari 0,70 untuk memastikan bahwa indikator tersebut memiliki tingkat konsistensi dan representasi yang kuat terhadap konstruk latennya."
             ),
             'outer weights': (
-                "Outer Weights menunjukkan kontribusi relatif masing-masing indikator terhadap pembentukan skor konstruk latennya. "
-                "Berbeda dengan outer loadings yang relevan untuk model reflektif, outer weights lebih penting dalam konteks model pengukuran formatif di mana indikator membentuk konstruk. "
-                "Dalam model formatif, setiap indikator menangkap aspek unik dari konstruk dan tidak harus berkorelasi tinggi satu sama lain. "
-                "Signifikansi outer weights diuji menggunakan bootstrapping; indikator dengan bobot tidak signifikan tetap dapat dipertahankan jika outer loading-nya lebih besar dari 0.50, "
-                "karena hal ini menunjukkan indikator tersebut tetap memiliki relevansi absolut terhadap konstruk meskipun kontribusi relatifnya kecil. "
-                "Penghapusan indikator formatif harus dilakukan dengan hati-hati karena dapat mengubah makna konseptual dari konstruk tersebut."
+                "Bobot luar (outer weights) digunakan untuk mengukur kontribusi relatif dari masing-masing indikator dalam membentuk konstruk laten formatif. Signifikansi bobot ini dievaluasi melalui prosedur bootstrapping."
             ),
             'r square': (
-                "R-Square (R² atau koefisien determinasi) menunjukkan proporsi varians dalam variabel endogen yang dapat dijelaskan oleh variabel-variabel eksogen yang memprediksinya dalam model struktural. "
-                "Nilai R² berkisar antara nol hingga satu, di mana nilai yang lebih tinggi mengindikasikan kemampuan prediktif yang lebih baik. "
-                "Menurut Chin (1998), dalam penelitian ilmu perilaku, nilai R² sebesar 0.67 dikategorikan substansial, 0.33 dikategorikan moderat, dan 0.19 dikategorikan lemah. "
-                "Namun, Cohen (1988) menyarankan kriteria yang berbeda: 0.26 sebagai substansial, 0.13 sebagai moderat, dan 0.02 sebagai lemah. "
-                "Pemilihan kriteria tergantung pada konteks dan disiplin ilmu penelitian. Dalam studi eksploratori, nilai R² yang lebih rendah masih dapat diterima, "
-                "sementara dalam studi dengan teori yang mapan, nilai R² yang lebih tinggi diharapkan. "
-                "Selain R², SmartPLS juga menyediakan R² Adjusted yang memperhitungkan jumlah prediktor dalam model, memberikan estimasi yang lebih konservatif tentang kekuatan penjelasan model."
+                "Koefisien determinasi (R-Square) mencerminkan proporsi varians variabel endogen yang dapat dijelaskan oleh variabel-variabel eksogen yang mempengaruhinya. Nilai R-Square berkisar dari 0 hingga 1, di mana nilai yang lebih besar menunjukkan kemampuan prediksi model struktural yang lebih baik."
             ),
             'f square': (
-                "f-Square (f² atau ukuran efek) mengukur besarnya dampak atau kontribusi suatu konstruk prediktor terhadap R² konstruk endogen. "
-                "Nilai f² dihitung dengan membandingkan R² model lengkap dengan R² model yang variabel prediktor tertentu dihilangkan. "
-                "Menurut Cohen (1988), nilai f² sebesar 0.02 mengindikasikan efek kecil, 0.15 efek sedang, dan 0.35 efek besar. "
-                "Meskipun koefisien jalur bisa signifikan secara statistik, nilai f² yang kecil menunjukkan bahwa relevansi praktis hubungan tersebut terbatas. "
-                "Sebaliknya, nilai f² yang besar mengkonfirmasi bahwa variabel prediktor memiliki kontribusi substansial dalam menjelaskan varians variabel endogen. "
-                "Analisis f² membantu peneliti untuk tidak hanya fokus pada signifikansi statistik, tetapi juga mempertimbangkan signifikansi praktis dari temuan penelitian."
+                "Nilai f-Square (effect size) digunakan untuk mengukur kontribusi praktis dari suatu variabel eksogen terhadap nilai R-Square variabel endogen. Berdasarkan kriteria Cohen, kontribusi f-Square dikategorikan kecil (0,02), sedang (0,15), dan besar (0,35)."
             ),
             'construct reliability': (
-                "Tabel Construct Reliability and Validity menampilkan berbagai metrik untuk mengevaluasi kualitas model pengukuran, khususnya reliabilitas dan validitas konstruk. "
-                "Cronbach's Alpha adalah ukuran tradisional reliabilitas konsistensi internal yang mengasumsikan semua indikator memiliki loading yang sama. "
-                "Nilai Cronbach's Alpha di atas 0.70 umumnya dianggap dapat diterima, meskipun dalam penelitian eksploratori nilai di atas 0.60 masih dapat diterima. "
-                "Composite Reliability (CR) merupakan alternatif yang lebih tepat untuk PLS-SEM karena memperhitungkan perbedaan loading antar indikator. "
-                "Kriteria CR di atas 0.70 berlaku untuk penelitian konfirmatori dan di atas 0.60 untuk penelitian eksploratori. "
-                "Average Variance Extracted (AVE) mengukur validitas konvergen dengan menghitung rata-rata varians yang diekstrak dari indikator oleh konstruk. "
-                "AVE di atas 0.50 menunjukkan bahwa konstruk menjelaskan lebih dari setengah varians indikatornya, mengkonfirmasi validitas konvergen yang memadai. "
-                "Rho_A adalah ukuran reliabilitas alternatif yang biasanya memiliki nilai di antara Cronbach's Alpha dan Composite Reliability."
+                "Uji keandalan konstruk (construct reliability) dilakukan untuk mengevaluasi konsistensi internal dari model pengukuran menggunakan kriteria Composite Reliability (CR) dan Cronbach's Alpha. Untuk penelitian uji teori, nilai Composite Reliability yang disarankan adalah lebih besar dari 0,60."
             ),
             'fornell-larcker': (
-                "Fornell-Larcker Criterion merupakan metode tradisional untuk menguji validitas diskriminan dalam model PLS-SEM. "
-                "Validitas diskriminan menunjukkan sejauh mana suatu konstruk benar-benar berbeda dan unik dari konstruk-konstruk lainnya dalam model, "
-                "memastikan bahwa setiap konstruk menangkap fenomena yang tidak diwakili oleh konstruk lain. "
-                "Kriteria Fornell-Larcker menyatakan bahwa akar kuadrat AVE suatu konstruk (ditampilkan pada diagonal matriks) harus lebih besar dari korelasi konstruk tersebut dengan konstruk lainnya (nilai off-diagonal). "
-                "Secara logis, hal ini berarti konstruk berbagi lebih banyak varians dengan indikatornya sendiri dibandingkan dengan konstruk lain. "
-                "Meskipun kriteria ini banyak digunakan, penelitian terbaru oleh Henseler et al. (2015) menunjukkan bahwa Fornell-Larcker kurang sensitif dalam mendeteksi masalah validitas diskriminan, "
-                "terutama ketika loading indikator tinggi dan seragam. Oleh karena itu, disarankan untuk juga memeriksa HTMT sebagai kriteria tambahan."
+                "Kriteria Fornell-Larcker digunakan untuk mengevaluasi validitas diskriminan dengan membandingkan nilai akar kuadrat dari Average Variance Extracted (AVE) masing-masing konstruk dengan nilai korelasi antar konstruk. Validitas diskriminan terpenuhi jika nilai akar kuadrat AVE suatu konstruk lebih tinggi dibandingkan korelasinya dengan konstruk lainnya, dengan batas minimal AVE sebesar 0,50."
             ),
             'cross loadings': (
-                "Cross Loadings menampilkan loading setiap indikator terhadap semua konstruk dalam model, bukan hanya konstruk yang seharusnya diukur. "
-                "Tabel ini digunakan sebagai salah satu metode untuk mengevaluasi validitas diskriminan pada tingkat indikator. "
-                "Validitas diskriminan terpenuhi jika loading setiap indikator terhadap konstruk yang dimaksud lebih tinggi dibandingkan loading terhadap konstruk lainnya. "
-                "Perbedaan loading minimal 0.10 antara loading konstruk sendiri dan loading silang dianggap sebagai aturan praktis yang baik. "
-                "Jika suatu indikator memiliki cross loading yang tinggi pada konstruk lain, hal ini dapat mengindikasikan masalah konseptual atau empiris. "
-                "Dalam kasus demikian, peneliti perlu mempertimbangkan untuk menghapus indikator bermasalah atau mengevaluasi kembali definisi konseptual konstruk."
+                "Analisis cross loadings merupakan metode evaluasi validitas diskriminan di tingkat indikator. Kriteria terpenuhi apabila korelasi suatu indikator dengan konstruk laten utamanya lebih besar dibandingkan korelasi indikator tersebut dengan konstruk laten lainnya dalam model."
             ),
             'htmt': (
-                "Heterotrait-Monotrait Ratio (HTMT) merupakan kriteria modern dan lebih sensitif untuk menguji validitas diskriminan dibandingkan Fornell-Larcker Criterion. "
-                "HTMT didefinisikan sebagai rasio antara rata-rata korelasi indikator yang mengukur konstruk berbeda dengan rata-rata geometris korelasi indikator yang mengukur konstruk yang sama. "
-                "Jika dua konstruk benar-benar berbeda secara empiris, rasio ini seharusnya mendekati nol. "
-                "Menurut Henseler et al. (2015), nilai HTMT di bawah 0.90 mengindikasikan validitas diskriminan yang memadai untuk konstruk yang secara konseptual berbeda. "
-                "Untuk konstruk yang secara konseptual lebih mirip, ambang batas konservatif HTMT di bawah 0.85 disarankan. "
-                "Selain nilai HTMT, signifikansi dapat diuji menggunakan interval kepercayaan bootstrap; jika interval tidak mencakup nilai satu, validitas diskriminan terkonfirmasi."
+                "Rasio Heterotrait-Monotrait (HTMT) merupakan metode modern untuk mendeteksi masalah validitas diskriminan. Nilai rasio HTMT yang berada di bawah ambang batas 0,90 (atau di bawah 0,85 untuk kriteria yang lebih ketat) mengindikasikan bahwa validitas diskriminan antar konstruk telah terpenuhi."
             ),
             'vif': (
-                "Variance Inflation Factor (VIF) digunakan untuk mendeteksi adanya multikolinearitas, yaitu kondisi di mana terdapat korelasi yang tinggi antar variabel prediktor dalam model. "
-                "Multikolinearitas bermasalah karena dapat menyebabkan estimasi koefisien jalur yang tidak stabil dan mengurangi kekuatan statistik. "
-                "VIF dihitung berdasarkan proporsi varians suatu prediktor yang dijelaskan oleh prediktor lainnya. "
-                "Nilai VIF di bawah 3 mengindikasikan tidak ada masalah kolinearitas, VIF antara 3 hingga 5 memerlukan perhatian, "
-                "dan VIF di atas 5 mengindikasikan masalah kolinearitas yang serius. "
-                "Jika VIF tinggi terdeteksi, solusi meliputi menghapus salah satu prediktor yang berkorelasi tinggi atau menggabungkan prediktor menjadi satu konstruk."
+                "Variance Inflation Factor (VIF) digunakan untuk mengidentifikasi keberadaan isu multikolinearitas antar variabel prediktor. Nilai VIF di bawah 3 mengindikasikan kondisi ideal bebas kolinearitas, sementara nilai di atas 5 menunjukkan adanya multikolinearitas yang serius."
             ),
             'inner vif': (
-                "Inner VIF Values mengukur tingkat kolinearitas antar konstruk prediktor dalam model struktural. "
-                "Pengujian ini penting karena kolinearitas antar konstruk eksogen dapat membiaskan estimasi koefisien jalur. "
-                "Kriteria yang sama berlaku: VIF di bawah 3 ideal, VIF 3 hingga 5 perlu diperhatikan, dan VIF di atas 5 bermasalah. "
-                "Jika inner VIF tinggi, peneliti dapat mempertimbangkan untuk menghapus konstruk yang redundan atau membuat konstruk tingkat tinggi."
+                "Variance Inflation Factor dalam model struktural (inner VIF) digunakan untuk memeriksa apakah terdapat kolinearitas antar variabel eksogen (prediktor). Nilai VIF yang disarankan adalah kurang dari 3 untuk menghindari bias estimasi koefisien jalur."
             ),
             'outer vif': (
-                "Outer VIF Values mengukur tingkat kolinearitas antar indikator dalam model pengukuran, terutama relevan untuk model formatif. "
-                "Dalam model formatif, kolinearitas tinggi antar indikator dapat menyebabkan masalah karena setiap indikator diasumsikan memberikan kontribusi unik. "
-                "Kriteria VIF di bawah 5 umumnya diterapkan; jika VIF melebihi ambang batas ini, peneliti harus mempertimbangkan untuk menghapus atau menggabungkan indikator yang bermasalah. "
-                "Untuk model reflektif, outer VIF lebih merupakan diagnostik karena kolinearitas antar indikator sebenarnya diharapkan."
+                "Variance Inflation Factor dalam model pengukuran (outer VIF) mengevaluasi tingkat kolinearitas antar indikator manifest pada model pengukuran formatif. Ambang batas yang disarankan adalah di bawah 5."
             ),
             'fit summary': (
-                "Fit Summary menampilkan berbagai indikator kecocokan model yang membantu mengevaluasi seberapa baik model teoritis merepresentasikan data empiris. "
-                "SRMR (Standardized Root Mean Square Residual) mengukur perbedaan antara matriks korelasi yang diamati dan yang diimplikasikan oleh model. "
-                "Nilai SRMR di bawah 0.08 atau 0.10 mengindikasikan kecocokan model yang dapat diterima. "
-                "Chi-Square menguji apakah matriks kovariansi yang diobservasi sama dengan yang diprediksi model. "
-                "NFI (Normed Fit Index) membandingkan model yang diuji dengan model nol; nilai di atas 0.90 mengindikasikan kecocokan yang baik."
+                "Evaluasi kecocokan model (goodness of fit) dilakukan menggunakan metrik Fit Summary. Indikator utama yang digunakan adalah Standardized Root Mean Square Residual (SRMR), di mana nilai SRMR di bawah 0,08 menunjukkan bahwa model teoritis memiliki kecocokan yang baik dengan data empiris."
             ),
             'rms theta': (
-                "RMS Theta (Root Mean Square Theta) mengukur tingkat residu model pengukuran untuk model reflektif. "
-                "Nilai RMS Theta yang mendekati nol mengindikasikan bahwa model pengukuran reflektif merepresentasikan hubungan antar indikator dengan baik. "
-                "Menurut Lohmöller (1989), nilai RMS Theta di bawah 0.12 dapat dianggap sebagai ambang batas untuk model yang cocok. "
-                "Nilai yang tinggi dapat mengindikasikan spesifikasi model pengukuran yang kurang tepat."
+                "Root Mean Square Covariance (rms Theta) mengukur tingkat residu model pengukuran reflektif, di mana nilai di bawah 0,12 menunjukkan spesifikasi model pengukuran yang memadai."
             ),
             'mean, stdev': (
-                "Tabel ini menampilkan hasil prosedur Bootstrapping yang digunakan untuk menguji signifikansi statistik dalam PLS-SEM. "
-                "Bootstrapping adalah teknik pengambilan sampel ulang nonparametrik yang tidak mengasumsikan normalitas distribusi data. "
-                "Prosedur ini menghasilkan estimasi rata-rata sampel dan standar deviasi dari estimasi parameter. "
-                "T-Statistics dihitung sebagai rasio sampel asli terhadap standar deviasi dan mengikuti distribusi t. "
-                "Nilai T-Statistics di atas 1.96 signifikan pada tingkat signifikansi 5 persen (dua arah). "
-                "P-Values menunjukkan probabilitas mendapatkan parameter seekstrem yang diamati jika hipotesis nol benar. "
-                "Hipotesis penelitian diterima jika nilai P-Value lebih kecil dari tingkat signifikansi yang ditentukan, umumnya 0.05."
+                "Statistik deskriptif parameter yang dihasilkan dari prosedur bootstrapping mencakup rata-rata sampel, standar deviasi, t-statistics, dan p-values untuk menilai signifikansi empiris dari koefisien jalur."
             ),
             'confidence intervals': (
-                "Confidence Intervals (CI) menunjukkan rentang nilai di mana parameter populasi sebenarnya kemungkinan berada dengan tingkat kepercayaan tertentu. "
-                "Suatu hubungan dianggap signifikan secara statistik pada tingkat 5 persen jika interval kepercayaan 95 persen tidak mencakup nilai nol. "
-                "Jika interval mencakup nol, tidak dapat disimpulkan bahwa efek berbeda dari nol secara signifikan. "
-                "Confidence interval memberikan informasi tentang presisi estimasi dan memungkinkan evaluasi signifikansi praktis."
+                "Interval kepercayaan (confidence intervals) memberikan rentang estimasi parameter pada tingkat kepercayaan 95%. Hubungan dinyatakan signifikan jika rentang interval tersebut tidak melewati atau mencakup nilai nol."
             ),
             'q²': (
-                "Q-Square (Q²) adalah metrik untuk mengevaluasi relevansi prediktif model terhadap variabel endogen. "
-                "Q² diperoleh melalui prosedur blindfolding, yaitu teknik penggunaan kembali sampel. "
-                "Nilai Q² di atas nol mengindikasikan model memiliki relevansi prediktif, artinya model dapat memprediksi data yang tidak digunakan dalam estimasi. "
-                "Nilai Q² sebesar 0.02, 0.15, dan 0.35 masing-masing menunjukkan relevansi prediktif kecil, sedang, dan besar. "
-                "Nilai Q² negatif atau nol menunjukkan model tidak memiliki kemampuan prediktif yang memadai."
+                "Koefisien relevansi prediktif (Q²) hasil blindfolding digunakan untuk mengukur seberapa baik nilai observasi direkonstruksi oleh model struktural. Nilai Q² yang lebih besar dari nol menunjukkan bahwa model memiliki relevansi prediktif."
             ),
             'blindfolding': (
-                "Hasil Blindfolding menunjukkan kemampuan prediktif model menggunakan prosedur validasi silang. "
-                "Nilai Q² mengukur seberapa baik prediksi model dibandingkan dengan hanya menggunakan rata-rata. "
-                "Nilai Q² yang lebih tinggi mengindikasikan prediksi yang lebih akurat. "
-                "Hasil blindfolding melengkapi evaluasi R² dengan fokus pada kemampuan prediksi di luar sampel daripada penjelasan di dalam sampel."
+                "Prosedur blindfolding dilakukan untuk menghasilkan nilai koefisien relevansi prediktif (Q²), yang berguna untuk menilai kemampuan prediksi model struktural di luar sampel (out-of-sample predictive power)."
             ),
             'discriminant validity': (
-                "Validitas diskriminan mengevaluasi sejauh mana suatu konstruk benar-benar berbeda dari konstruk-konstruk lainnya dalam model. "
-                "Secara empiris, validitas diskriminan memastikan bahwa indikator-indikator suatu konstruk tidak berkorelasi terlalu tinggi dengan indikator konstruk lain. "
-                "Metode pengujian meliputi Fornell-Larcker Criterion, Cross Loadings, dan HTMT (Heterotrait-Monotrait Ratio). "
-                "Penelitian terbaru merekomendasikan HTMT sebagai kriteria utama karena sensitivitasnya yang lebih tinggi. "
-                "Kegagalan validitas diskriminan dapat mengindikasikan tumpang tindih konseptual antar konstruk."
+                "Uji validitas diskriminan bertujuan untuk memastikan bahwa setiap konstruk laten secara empiris bersifat unik dan berbeda dari konstruk lainnya dalam model."
             ),
             'quality criteria': (
-                "Quality Criteria menampilkan rangkuman berbagai metrik kualitas model PLS-SEM yang mencakup aspek reliabilitas, validitas, dan kemampuan prediktif. "
-                "Untuk model pengukuran reflektif, indikator meliputi reliabilitas indikator, konsistensi internal (Alpha dan CR), validitas konvergen (AVE), dan validitas diskriminan. "
-                "Untuk model struktural, evaluasi mencakup kolinearitas, signifikansi koefisien jalur, R-Square, f-Square, dan Q-Square. "
-                "Evaluasi menyeluruh terhadap kriteria kualitas merupakan langkah penting sebelum menginterpretasikan hasil hipotesis."
+                "Kriteria kualitas (quality criteria) merangkum seluruh parameter evaluasi kelayakan model pengukuran (outer model) dan model struktural (inner model) secara komprehensif."
             ),
             'collinearity': (
-                "Pengujian kolinearitas dilakukan untuk memastikan tidak ada hubungan linear yang kuat antar variabel prediktor dalam model. "
-                "Kolinearitas tinggi dapat menyebabkan estimasi yang tidak stabil dan bias. "
-                "Dalam PLS-SEM, kolinearitas dievaluasi menggunakan Variance Inflation Factor (VIF). "
-                "Nilai VIF di atas 5 mengindikasikan masalah yang perlu ditangani. "
-                "Solusi meliputi menghapus prediktor redundan atau menggunakan pendekatan konstruksi tingkat tinggi."
+                "Evaluasi kolinearitas dilakukan untuk mendeteksi redundansi hubungan linear antar variabel prediktor yang dapat mendistorsi hasil analisis."
             ),
             'final results': (
-                "Final Results merupakan rangkuman output utama yang menampilkan hasil estimasi model secara keseluruhan. "
-                "Bagian ini mencakup koefisien jalur, R-Square, dan parameter model pengukuran. "
-                "Penting untuk diingat bahwa koefisien dalam Final Results adalah estimasi titik tanpa informasi tentang signifikansi statistik. "
-                "Untuk menentukan signifikansi, hasil ini harus diinterpretasikan bersama dengan output Bootstrapping."
+                "Ringkasan hasil akhir (final results) menyajikan estimasi titik parameter model pengukuran dan model struktural yang diperoleh dari algoritma PLS."
             ),
         }
         
         # Find matching interpretation
+        name_norm = table_name_lower.replace('-', ' ')
         for key, interpretation in interpretations.items():
-            if key in table_name_lower:
+            key_norm = key.replace('-', ' ')
+            if key_norm in name_norm:
                 return interpretation
         
         # Default interpretation
@@ -316,6 +304,51 @@ class ScientificInterpreter:
             return result
         
         return base_interpretation
+        
+    def get_opening_narration(self, table_name):
+        return self.get_table_interpretation(table_name)
+        
+    def get_detailed_explanation(self, table_name, df):
+        table_name_lower = table_name.lower()
+        if 'goodness of fit' in table_name_lower or 'gof' in table_name_lower:
+            res = self._analyze_gof(df)
+            return "\n".join(res) if isinstance(res, list) else str(res)
+        elif 'vaf' in table_name_lower or 'variance accounted for' in table_name_lower:
+            res = self._analyze_vaf(df)
+            return "\n".join(res) if isinstance(res, list) else str(res)
+            
+        data_analysis = []
+        try:
+            if 'path coefficients' in table_name_lower or 'path coefficient' in table_name_lower:
+                data_analysis = self._analyze_path_coefficients(df)
+            elif 'r square' in table_name_lower or 'r-square' in table_name_lower:
+                data_analysis = self._analyze_r_square(df)
+            elif 'f square' in table_name_lower or 'f-square' in table_name_lower:
+                data_analysis = self._analyze_f_square(df)
+            elif 'outer loading' in table_name_lower:
+                data_analysis = self._analyze_outer_loadings(df)
+            elif 'construct reliability' in table_name_lower:
+                data_analysis = self._analyze_construct_reliability(df)
+            elif 'fornell-larcker' in table_name_lower:
+                data_analysis = self._analyze_fornell_larcker(df)
+            elif 'htmt' in table_name_lower:
+                data_analysis = self._analyze_htmt(df)
+            elif 'vif' in table_name_lower:
+                data_analysis = self._analyze_vif(df)
+            elif 'mean, stdev' in table_name_lower or 'bootstrapping' in table_name_lower:
+                data_analysis = self._analyze_bootstrapping(df)
+            elif 'indirect effect' in table_name_lower:
+                data_analysis = self._analyze_indirect_effects(df)
+            elif 'total effect' in table_name_lower:
+                data_analysis = self._analyze_total_effects(df)
+            elif 'q²' in table_name_lower or 'q square' in table_name_lower or 'blindfolding' in table_name_lower:
+                data_analysis = self._analyze_q_square(df)
+            elif 'interaction' in table_name_lower or 'moderating' in table_name_lower:
+                data_analysis = self._analyze_moderation_effects(df)
+        except Exception as e:
+            print(f"Error analyzing {table_name}: {e}")
+            
+        return "\n".join(data_analysis) if data_analysis else ""
     
     def _get_context_relevance_note(self, table_name_lower):
         """
@@ -338,14 +371,14 @@ class ScientificInterpreter:
                         val_num = float(val)
                         direction = "memperkuat" if val_num > 0 else "memperlemah"
                         strength = "signifikan" if abs(val_num) > 0.1 else "lemah"
-                        results.append(f"- Interaksi pada jalur {path} memiliki koefisien interaksi sebesar {val_num:.3f}, yang menunjukkan bahwa moderator {direction} hubungan dengan efek {strength}.")
+                        results.append(f"Pengaruh interaksi pada hubungan {path} memiliki nilai koefisien moderasi sebesar {val_num:.3f}. Temuan ini menunjukkan bahwa variabel moderator {direction} kekuatan hubungan langsung tersebut dengan kategori efek yang tergolong {strength}.")
                     except:
                         pass
         except:
             pass
         
         if not results:
-            results.append("Tidak ditemukan efek interaksi yang signifikan dalam tabel ini.")
+            results.append("Berdasarkan data pengujian, tidak ditemukan adanya efek moderasi atau interaksi yang signifikan secara statistik pada model struktural ini.")
         
         return results
     
@@ -370,9 +403,9 @@ class ScientificInterpreter:
                     if pd.notna(val) and var:
                         try:
                             val_num = float(val)
-                            direction = "positif" if val_num > 0 else "negatif"
+                            direction = "Positif" if val_num > 0 else "Negatif"
                             strength = "kuat" if abs(val_num) > 0.5 else ("sedang" if abs(val_num) > 0.3 else "lemah")
-                            results.append(f"- Jalur hubungan {var} memiliki nilai koefisien jalur sebesar {val_num:.3f}. Hasil ini mengindikasikan adanya pengaruh {direction} dengan kategori kekuatan {strength}.")
+                            results.append(f"Hubungan pada jalur {var} menunjukkan nilai koefisien jalur (path coefficient) sebesar {val_num:.3f}, yang merepresentasikan adanya pengaruh {direction.lower()} dengan tingkat kekuatan yang tergolong {strength}.")
                         except:
                             pass
         except:
@@ -390,15 +423,15 @@ class ScientificInterpreter:
                     try:
                         val_num = float(val)
                         if val_num >= 0.67:
-                            cat = "substansial atau kuat"
+                            cat = "substansial (kuat)"
                         elif val_num >= 0.33:
-                            cat = "moderat atau sedang"
+                            cat = "moderat (sedang)"
                         elif val_num >= 0.19:
                             cat = "lemah"
                         else:
                             cat = "sangat lemah"
                         pct = val_num * 100
-                        results.append(f"- Variabel {var} memiliki nilai R-Square sebesar {val_num:.3f}. Nilai tersebut menunjukkan bahwa model pengaruh pada variabel {var} tergolong {cat}, di mana sebesar {pct:.1f} persen varians dapat dijelaskan oleh konstruk yang mempengaruhinya.")
+                        results.append(f"Variabel endogen {var} memiliki nilai koefisien determinasi R-Square sebesar {val_num:.3f}, yang menunjukkan bahwa model pengaruh terhadap konstruk tersebut tergolong {cat}. Hasil ini mengimplikasikan bahwa sebesar {pct:.1f}% variabilitas konstruk {var} dapat dijelaskan oleh konstruk eksogen yang mempengaruhinya, sedangkan sisanya dijelaskan oleh faktor lain di luar model penelitian.")
                     except:
                         pass
         except:
@@ -424,7 +457,7 @@ class ScientificInterpreter:
                                     effect = "sedang"
                                 else:
                                     effect = "kecil"
-                                results.append(f"- Hubungan variabel {var_from} terhadap {col} memiliki nilai f-Square sebesar {val_num:.3f}, yang mengindikasikan ukuran efek {effect}.")
+                                results.append(f"Pengaruh variabel {var_from} terhadap {col} menghasilkan nilai f-Square sebesar {val_num:.3f}, yang mengindikasikan bahwa ukuran efek (effect size) dari konstruk eksogen tersebut berada pada kategori {effect}.")
                         except:
                             pass
         except:
@@ -445,18 +478,18 @@ class ScientificInterpreter:
                         try:
                             val_num = float(val)
                             if abs(val_num) > 0.4:  # Only own loadings
-                                if val_num >= 0.708:
+                                if round(val_num, 3) >= 0.708:
                                     good_count += 1
                                 elif val_num >= 0.4:
                                     weak_count += 1
-                                    results.append(f"- Indikator {indicator} pada konstruk {col} memiliki nilai loading sebesar {val_num:.3f}. Nilai tersebut berada di bawah ambang batas ideal, sehingga perlu dipertimbangkan untuk eksklusi.")
+                                    results.append(f"Indikator {indicator} pada konstruk {col} menunjukkan nilai loading sebesar {val_num:.3f}. Angka tersebut berada di bawah ambang batas ideal 0,708, sehingga perlu dipertimbangkan untuk dieliminasi dari model guna meningkatkan validitas konvergen.")
                         except:
                             pass
         except:
             pass
-        summary = f"Ringkasan: Sebanyak {good_count} indikator telah memenuhi kriteria loading factor (di atas 0.708)."
+        summary = f"Berdasarkan hasil analisis loading factor, sebanyak {good_count} indikator dinyatakan telah memenuhi kriteria kelayakan di atas 0,708."
         if weak_count > 0:
-            summary += f" Namun, terdapat {weak_count} indikator yang perlu mendapatkan perhatian lebih lanjut karena nilai loading berada di antara 0.40 hingga 0.708."
+            summary += f" Namun demikian, terdapat {weak_count} indikator yang memerlukan perhatian lebih lanjut karena memiliki nilai loading di bawah batas ideal (antara 0,40 hingga 0,708)."
         else:
             summary += ""
         return [summary] + results[:5]
@@ -485,26 +518,26 @@ class ScientificInterpreter:
                             if val_num >= 0.7:
                                 good_points.append(f"Cronbach's α = {val_num:.3f} (baik)")
                             else:
-                                issues.append(f"Cronbach's α = {val_num:.3f} (di bawah 0.7, kurang reliabel)")
+                                issues.append(f"Cronbach's α = {val_num:.3f} (kurang reliabel)")
                         
                         elif 'composite' in col_lower or 'rho_c' in col_lower or 'cr' in col_lower:
                             if val_num >= 0.7:
                                 good_points.append(f"CR = {val_num:.3f} (baik)")
                             else:
-                                issues.append(f"CR = {val_num:.3f} (di bawah 0.7, kurang reliabel)")
+                                issues.append(f"CR = {val_num:.3f} (kurang reliabel)")
                         
                         elif 'ave' in col_lower:
                             if val_num >= 0.5:
                                 good_points.append(f"AVE = {val_num:.3f} (valid)")
                             else:
-                                issues.append(f"AVE = {val_num:.3f} (di bawah 0.5, validitas konvergen rendah)")
+                                issues.append(f"AVE = {val_num:.3f} (validitas konvergen rendah)")
                     except:
                         pass
                 
                 if good_points or issues:
-                    status = "Memenuhi kriteria" if not issues else "Perlu perhatian"
+                    status = "memenuhi kriteria secara memadai" if not issues else "memerlukan evaluasi lebih lanjut"
                     detail = "; ".join(good_points + issues)
-                    results.append(f"- {construct}: {status}. Detail: {detail}")
+                    results.append(f"Evaluasi konsistensi internal dan validitas konvergen untuk konstruk {construct} menunjukkan status {status}, dengan rincian metrik: {detail}.")
         except:
             pass
         return results
@@ -537,17 +570,17 @@ class ScientificInterpreter:
                                     try:
                                         off_num = float(off_val)
                                         if off_num > diag_num:
-                                            issues.append(f"{construct} dengan {col}: akar kuadrat AVE ({diag_num:.3f}) lebih kecil dari korelasi ({off_num:.3f})")
+                                            issues.append(f"konstruk {construct} memiliki nilai akar kuadrat AVE ({diag_num:.3f}) yang lebih kecil dibandingkan nilai korelasi konstruk tersebut dengan konstruk {col} ({off_num:.3f})")
                                     except:
                                         pass
                     except:
                         pass
             
             if issues:
-                results.append("Terdapat masalah validitas diskriminan:")
-                results.extend([f"- {issue}" for issue in issues])
+                results.append("Berdasarkan kriteria Fornell-Larcker, diidentifikasi adanya indikasi permasalahan validitas diskriminan pada beberapa konstruk berikut:")
+                results.extend([f"Terdapat kendala di mana {issue}." for issue in issues])
             else:
-                results.append("Semua konstruk memenuhi kriteria Fornell-Larcker (akar kuadrat AVE lebih besar dari korelasi antar konstruk).")
+                results.append("Seluruh konstruk dalam model penelitian ini telah memenuhi kriteria validitas diskriminan Fornell-Larcker, di mana nilai akar kuadrat AVE masing-masing konstruk laten terbukti lebih besar dibandingkan dengan nilai korelasi antar-konstruk.")
         except:
             pass
         return results
@@ -566,20 +599,20 @@ class ScientificInterpreter:
                             val_num = float(val)
                             pair = f"{row.iloc[0]} dengan {col}"
                             if val_num >= 0.90:
-                                issues.append(f"{pair}: HTMT = {val_num:.3f} (lebih besar atau sama dengan 0.90)")
+                                issues.append(f"pasangan konstruk {pair} menunjukkan nilai rasio HTMT sebesar {val_num:.3f}, yang melampaui batas kritis 0,90")
                             elif val_num >= 0.85:
-                                warnings.append(f"{pair}: HTMT = {val_num:.3f} (0.85-0.90)")
+                                warnings.append(f"pasangan konstruk {pair} menunjukkan nilai rasio HTMT sebesar {val_num:.3f} (kategori peringatan)")
                         except:
                             pass
             
             if issues:
-                results.append("Masalah validitas diskriminan terdeteksi (HTMT di atas atau sama dengan 0.90):")
-                results.extend([f"- {issue}" for issue in issues])
+                results.append("Hasil pengujian rasio Heterotrait-Monotrait (HTMT) mengindikasikan adanya potensi masalah validitas diskriminan pada pasangan konstruk berikut:")
+                results.extend([f"Indikasi tumpang tindih terjadi karena {issue}." for issue in issues])
             if warnings:
-                results.append("Perlu perhatian (HTMT antara 0.85 hingga 0.90):")
-                results.extend([f"- {w}" for w in warnings])
+                results.append("Analisis rasio HTMT mendeteksi adanya indikasi kolinearitas diskriminan moderat pada pasangan konstruk berikut:")
+                results.extend([f"Perlu perhatian karena {w}." for w in warnings])
             if not issues and not warnings:
-                results.append("Semua pasangan konstruk memenuhi kriteria HTMT (lebih kecil dari 0.85), sehingga validitas diskriminan terkonfirmasi.")
+                results.append("Seluruh estimasi rasio HTMT berada di bawah ambang batas kritis 0,90 (serta di bawah batas konservatif 0,85), sehingga dapat disimpulkan bahwa validitas diskriminan antar konstruk telah terpenuhi secara memadai.")
         except:
             pass
         return results
@@ -598,24 +631,20 @@ class ScientificInterpreter:
                         try:
                             val_num = float(val)
                             if val_num >= 5:
-                                issues.append(f"Variabel {var} terhadap {col} memiliki VIF = {val_num:.2f} (lebih besar atau sama dengan 5, kolinearitas tinggi)")
+                                issues.append(f"hubungan prediktor {var} terhadap {col} menghasilkan nilai VIF sebesar {val_num:.2f} (di atas batas kritis 5,0)")
                             elif val_num >= 3:
-                                warnings.append(f"Variabel {var} terhadap {col} memiliki VIF = {val_num:.2f} (antara 3-5, perlu perhatian)")
+                                warnings.append(f"hubungan prediktor {var} terhadap {col} memiliki nilai VIF sebesar {val_num:.2f} (di atas 3,0)")
                         except:
                             pass
             
-
-
-
-            
             if issues:
-                results.append("Masalah multikolinearitas terdeteksi:")
-                results.extend([f"- {issue}" for issue in issues])
+                results.append("Berdasarkan hasil analisis Variance Inflation Factor (VIF), terdeteksi adanya indikasi permasalahan multikolinearitas yang serius pada variabel prediktor berikut:")
+                results.extend([f"Distorsi estimasi koefisien jalur berpotensi terjadi karena {issue}." for issue in issues])
             if warnings:
-                results.append("Indikasi kolinearitas moderat:")
-                results.extend([f"- {w}" for w in warnings])
+                results.append("Analisis VIF menunjukkan adanya kolinearitas moderat yang memerlukan perhatian pada variabel prediktor berikut:")
+                results.extend([f"Diperlukan kehati-hatian karena {w}." for w in warnings])
             if not issues and not warnings:
-                results.append("Tidak ada masalah multikolinearitas (semua VIF di bawah 3).")
+                results.append("Hasil pengujian VIF menunjukkan tidak adanya masalah multikolinearitas dalam model prediktor, di mana seluruh nilai VIF berada di bawah batas konservatif 3,0, sehingga estimasi koefisien jalur dinyatakan stabil.")
         except:
             pass
         return results
@@ -661,15 +690,18 @@ class ScientificInterpreter:
                     except:
                         pass
                 
+                p_str = f"{p_val:.4f}" if p_val is not None else "n.a."
+                t_str = f"{t_val:.3f}" if t_val is not None else "n.a."
+                
                 if is_sig:
                     sig_count += 1
-                    sig_level = "(sangat signifikan)" if (p_val and p_val < 0.01) else ("(signifikan)" if (p_val and p_val < 0.05) else "")
-                    results.append(f"- {path}: Hasil menunjukkan hubungan yang signifikan {sig_level} dengan nilai P-Value sebesar {p_val:.4f if p_val else 'n.a.'} dan T-Statistic sebesar {t_val:.3f if t_val else 'n.a.'}. Kesimpulan: Hipotesis diterima.")
+                    sig_level = " (sangat signifikan)" if (p_val is not None and p_val < 0.01) else (" (signifikan)" if (p_val is not None and p_val < 0.05) else "")
+                    results.append(f"Jalur pengaruh {path} menunjukkan hasil yang signifikan{sig_level} dengan nilai P-Value = {p_str} dan T-Statistic = {t_str}, sehingga hipotesis yang diajukan dinyatakan diterima secara statistik.")
                 elif p_val is not None or t_val is not None:
                     nonsig_count += 1
-                    results.append(f"- {path}: Hasil menunjukkan hubungan yang tidak signifikan dengan nilai P-Value sebesar {p_val:.4f if p_val else 'n.a.'} dan T-Statistic sebesar {t_val:.3f if t_val else 'n.a.'}. Kesimpulan: Hipotesis ditolak.")
+                    results.append(f"Jalur pengaruh {path} menunjukkan hasil yang tidak signifikan dengan nilai P-Value = {p_str} dan T-Statistic = {t_str}, sehingga hipotesis yang diajukan dinyatakan ditolak secara statistik.")
             
-            summary = f"Ringkasan: {sig_count} jalur signifikan, {nonsig_count} jalur tidak signifikan."
+            summary = f"Berdasarkan hasil analisis uji signifikansi (bootstrapping), diperoleh kesimpulan bahwa terdapat {sig_count} jalur pengaruh yang signifikan dan {nonsig_count} jalur pengaruh yang tidak signifikan secara statistik."
             results.insert(0, summary)
         except:
             pass
@@ -687,7 +719,7 @@ class ScientificInterpreter:
                         val_num = float(val)
                         if abs(val_num) > 0.01:
                             strength = "kuat" if abs(val_num) > 0.2 else ("sedang" if abs(val_num) > 0.1 else "lemah")
-                            results.append(f"- {path}: Efek tidak langsung sebesar {val_num:.3f} ({strength}). Hal ini menunjukkan bahwa mediasi terjadi melalui jalur ini.")
+                            results.append(f"Jalur pengaruh tidak langsung {path} memiliki nilai koefisien mediasi sebesar {val_num:.3f} dengan tingkat kekuatan {strength}, yang menunjukkan adanya peran variabel mediator dalam menghubungkan pengaruh konstruk eksogen ke konstruk endogen.")
                     except:
                         pass
         except:
@@ -706,7 +738,7 @@ class ScientificInterpreter:
                         val_num = float(val)
                         direction = "positif" if val_num > 0 else "negatif"
                         strength = "besar" if abs(val_num) > 0.5 else ("moderat" if abs(val_num) > 0.3 else "kecil")
-                        results.append(f"- {path}: Total efek sebesar {val_num:.3f}. Ini menunjukkan pengaruh total yang bersifat {direction} dengan magnitude {strength}.")
+                        results.append(f"Total efek kumulatif pada jalur {path} tercata sebesar {val_num:.3f}, yang menunjukkan pengaruh keseluruhan yang bersifat {direction} dengan kategori ukuran {strength}.")
                     except:
                         pass
         except:
@@ -750,9 +782,9 @@ class ScientificInterpreter:
                                     relevance = "sedang"
                                 else:
                                     relevance = "kecil"
-                                results.append(f"- {var}: Nilai Q² = {val_num:.3f}, yang berarti model memiliki relevansi prediktif {relevance}.")
+                                results.append(f"Konstruk endogen {var} menghasilkan nilai relevansi prediktif Q² sebesar {val_num:.3f}. Karena nilai tersebut lebih besar dari nol, model struktural dinyatakan memiliki kemampuan relevansi prediktif dalam kategori {relevance}.")
                             else:
-                                results.append(f"- {var}: Nilai Q² = {val_num:.3f}, menunjukkan bahwa model tidak memiliki relevansi prediktif (Q² kurang dari atau sama dengan 0).")
+                                results.append(f"Konstruk endogen {var} memiliki nilai Q² sebesar {val_num:.3f}, yang menunjukkan bahwa model struktural tidak memiliki kemampuan relevansi prediktif yang memadai karena nilainya berada di bawah atau sama dengan nol.")
                         except:
                             pass
         except:
@@ -1240,6 +1272,54 @@ class ScientificInterpreter:
         except Exception as e:
             print(f"[Interpretation Error] Failed to create Document: {e}")
             return
+            
+        # Setup native MS Word multilevel numbering (4.1, 4.1.1, etc.)
+        try:
+            from docx.oxml import parse_xml
+            numbering = doc.part.numbering_part.element
+            
+            abstract_xml = (
+                '<w:abstractNum xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:abstractNumId="100">'
+                '  <w:multiLevelType w:val="multilevel"/>'
+                '  <w:lvl w:ilvl="0">'
+                '    <w:start w:val="1"/>'
+                '    <w:numFmt w:val="decimal"/>'
+                '    <w:lvlText w:val="4.%1"/>'
+                '    <w:lvlJc w:val="left"/>'
+                '    <w:pPr><w:ind w:left="420" w:hanging="420"/></w:pPr>'
+                '    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/></w:rPr>'
+                '  </w:lvl>'
+                '  <w:lvl w:ilvl="1">'
+                '    <w:start w:val="1"/>'
+                '    <w:numFmt w:val="decimal"/>'
+                '    <w:lvlText w:val="4.%1.%2"/>'
+                '    <w:lvlJc w:val="left"/>'
+                '    <w:pPr><w:ind w:left="840" w:hanging="420"/></w:pPr>'
+                '    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/></w:rPr>'
+                '  </w:lvl>'
+                '  <w:lvl w:ilvl="2">'
+                '    <w:start w:val="1"/>'
+                '    <w:numFmt w:val="decimal"/>'
+                '    <w:lvlText w:val="4.%1.%2.%3"/>'
+                '    <w:lvlJc w:val="left"/>'
+                '    <w:pPr><w:ind w:left="1260" w:hanging="420"/></w:pPr>'
+                '    <w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/></w:rPr>'
+                '  </w:lvl>'
+                '</w:abstractNum>'
+            )
+            
+            num_xml = (
+                '<w:num xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" w:numId="100">'
+                '  <w:abstractNumId w:val="100"/>'
+                '</w:num>'
+            )
+            
+            abstract_el = parse_xml(abstract_xml)
+            num_el = parse_xml(num_xml)
+            numbering.append(abstract_el)
+            numbering.append(num_el)
+        except Exception as e:
+            print(f"[Interpretation Warning] Failed to setup native multilevel numbering: {e}")
         
         # [STYLE CONFIGURATION] FORCE TIMES NEW ROMAN 12 BLACK
         try:
@@ -1253,9 +1333,16 @@ class ScientificInterpreter:
             # 2. Heading 1
             h1 = doc.styles['Heading 1']
             h1.font.name = 'Times New Roman'
-            h1.font.size = Pt(14)
+            h1.font.size = Pt(12)
             h1.font.bold = True
             h1.font.color.rgb = RGBColor(0, 0, 0)
+            
+            # Heading 2
+            h2 = doc.styles['Heading 2']
+            h2.font.name = 'Times New Roman'
+            h2.font.size = Pt(12)
+            h2.font.bold = True
+            h2.font.color.rgb = RGBColor(0, 0, 0)
             
             # 3. List Bullet
             lb = doc.styles['List Bullet']
@@ -1266,99 +1353,115 @@ class ScientificInterpreter:
             pass
         
         # Title
-        header = doc.add_heading('INTERPRETASI HASIL ANALISIS DATA', 0)
-        header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # Enforce header style manually just in case
-        for run in header.runs:
-            run.font.name = 'Times New Roman'
-            run.font.size = Pt(14)
-            run.font.color.rgb = RGBColor(0, 0, 0)
-            run.bold = True
-            
-        # [TABLE OF CONTENTS]
-        # Insert "DAFTAR ISI" header
-        toc_header = doc.add_paragraph()
-        toc_run = toc_header.add_run("DAFTAR ISI")
-        toc_run.font.name = 'Times New Roman'
-        toc_run.font.size = Pt(14)
-        toc_run.bold = True
-        toc_header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Insert TOC Field Code via XML
-        paragraph = doc.add_paragraph()
-        run = paragraph.add_run()
-        fldChar = OxmlElement('w:fldChar')
-        fldChar.set(qn('w:fldCharType'), 'begin')
-        run._r.append(fldChar)
-        
-        instrText = OxmlElement('w:instrText')
-        instrText.set(qn('xml:space'), 'preserve')
-        instrText.text = 'TOC \\o "1-3" \\h \\z \\u'
-        run._r.append(instrText)
-        
-        fldChar2 = OxmlElement('w:fldChar')
-        fldChar2.set(qn('w:fldCharType'), 'separate')
-        run._r.append(fldChar2)
-        
-        fldChar3 = OxmlElement('w:t')
-        fldChar3.text = "Right-click to update field."
-        run._r.append(fldChar3)
-        
-        fldChar4 = OxmlElement('w:fldChar')
-        fldChar4.set(qn('w:fldCharType'), 'end')
-        run._r.append(fldChar4)
-        
-        doc.add_page_break()
+        p_title = doc.add_paragraph()
+        p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_title.paragraph_format.space_after = Pt(24)
+        run_title = p_title.add_run("BAB IV\nHASIL DAN PEMBAHASAN")
+        run_title.font.name = 'Times New Roman'
+        run_title.font.size = Pt(14)
+        run_title.bold = True
+        run_title.font.color.rgb = RGBColor(0, 0, 0)
         
         for section in self.paragraphs:
             if section['type'] == 'header':
-                h = doc.add_heading(section['text'], level=1)
+                level = section.get('level', 1)
+                full_title = section['text'].strip()
+                    
+                h = doc.add_heading(full_title, level=level)
+                h.paragraph_format.space_before = Pt(12)
+                h.paragraph_format.space_after = Pt(6)
+                h.paragraph_format.keep_with_next = True
                 for run in h.runs:
                     run.font.name = 'Times New Roman'
-                    run.font.size = Pt(14) # Headers usually 14 or 13
+                    run.font.size = Pt(12)
                     run.font.color.rgb = RGBColor(0, 0, 0)
                     run.bold = True
+                    
+                # Apply native MS Word multilevel numbering
+                try:
+                    ilvl = level - 1
+                    pPr = h._p.get_or_add_pPr()
+                    numPr = OxmlElement('w:numPr')
+                    ilvl_el = OxmlElement('w:ilvl')
+                    ilvl_el.set(qn('w:val'), str(ilvl))
+                    numId_el = OxmlElement('w:numId')
+                    numId_el.set(qn('w:val'), '100')
+                    numPr.append(ilvl_el)
+                    numPr.append(numId_el)
+                    pPr.append(numPr)
+                except Exception as e:
+                    print(f"Error applying numbering to heading: {e}")
+                    
+
+                    
             elif section['type'] == 'table':
                 # Render DataFrame as Table
                 df = section['data']
                 table = doc.add_table(rows=1, cols=len(df.columns))
                 table.style = 'Table Grid'
+                try:
+                    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                except:
+                    pass
                 
                 # Header
                 hdr_cells = table.rows[0].cells
                 for i, col_name in enumerate(df.columns):
-                    if pd.isna(col_name) or str(col_name).lower() == 'nan':
-                        hdr_cells[i].text = "" # Empty for NaN header
-                    else:
-                        hdr_cells[i].text = str(col_name)
+                    val_hdr = "" if (pd.isna(col_name) or str(col_name).lower() == 'nan') else str(col_name)
+                    hdr_cells[i].text = val_hdr
                     
-                    # Bold header
-                    for run in hdr_cells[i].paragraphs[0].runs:
-                        run.font.bold = True
-                        run.font.name = 'Times New Roman'
-                        
+                    for para in hdr_cells[i].paragraphs:
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        for run in para.runs:
+                            run.font.bold = True
+                            run.font.name = 'Times New Roman'
+                            run.font.size = Pt(11)
+                            run.font.color.rgb = RGBColor(0, 0, 0)
+                            
                 # Rows
                 for _, row in df.iterrows():
                     row_cells = table.add_row().cells
                     for i, val in enumerate(row):
                         # Format floats
-                        if isinstance(val, float):
-                            if pd.isna(val):
-                                row_cells[i].text = "" # Empty for NaN value
-                            else:
-                                row_cells[i].text = f"{val:.3f}"
+                        if isinstance(val, (int, float)):
+                            try:
+                                val_num = float(val)
+                                if pd.isna(val_num):
+                                    val_str = ""
+                                else:
+                                    val_str = f"{val_num:.3f}".replace('.', ',')
+                            except:
+                                val_str = str(val)
                         else:
                             val_str = str(val) if val is not None else ""
                             if val_str.lower() == "nan": val_str = ""
-                            row_cells[i].text = val_str
                         
-                        # Set font for cells
-                        for run in row_cells[i].paragraphs[0].runs:
-                            run.font.name = 'Times New Roman'
-                            run.font.size = Pt(11)
-                            
+                        row_cells[i].text = val_str
+                        
+                        # Set font and alignments for cells
+                        for para in row_cells[i].paragraphs:
+                            if i == 0:
+                                para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                            else:
+                                para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                            for run in para.runs:
+                                run.font.name = 'Times New Roman'
+                                run.font.size = Pt(11)
+                                run.font.color.rgb = RGBColor(0, 0, 0)
+                                
                 doc.add_paragraph() # Spacer
                 
+            elif section['type'] == 'equation':
+                p = doc.add_paragraph()
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.space_after = Pt(12)
+                try:
+                    from docx.oxml import parse_xml
+                    omml_el = parse_xml(section['xml'])
+                    p._p.append(omml_el)
+                except Exception as e:
+                    print(f"Error parsing equation XML: {e}")
+                    
             else:
                 # Handle text sections with potential bullet points
                 lines = section['text'].split('\n')
@@ -1368,17 +1471,18 @@ class ScientificInterpreter:
                         continue
                         
                     if line.startswith("- ") or line.startswith("• "):
-                        # Clean bullet marker (- or •)
-                        clean_text = line[1:].strip() 
-                        # Add as list bullet
-                        try:
-                            p = doc.add_paragraph(clean_text, style='List Bullet')
-                        except:
-                            # Fallback if style not found
-                            p = doc.add_paragraph(clean_text)
-                            
-                        p.paragraph_format.space_after = Pt(6) # Smaller gap for list items
+                        # Format as a custom indented paragraph with bullet character
+                        bullet_char = "• "
+                        clean_text = line[1:].strip()
+                        p = doc.add_paragraph()
+                        # Set custom indentation for list items
+                        p.paragraph_format.left_indent = Pt(18)
+                        p.paragraph_format.first_line_indent = Pt(-12)
+                        p.paragraph_format.space_after = Pt(6)
                         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                        
+                        p.add_run(bullet_char)
+                        p.add_run(clean_text)
                     else:
                         p = doc.add_paragraph(line)
                         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY

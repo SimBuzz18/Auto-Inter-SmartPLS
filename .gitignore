@@ -23,3 +23,11 @@ venv.bak/
 # Custom
 config.json
 temp_*.py
+
+
+#Tests
+tests/test_*.py
+
+#Input & Output
+*.xlsx
+*.doc
