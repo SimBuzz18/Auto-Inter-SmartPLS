@@ -7,10 +7,30 @@ echo.
 
 :: Cek keberadaan virtual environment
 if not exist "venv\Scripts\activate.bat" (
-    echo [ERROR] Virtual environment (venv) tidak ditemukan!
+    echo [ERROR] Virtual environment venv tidak ditemukan!
     echo Silakan buat venv terlebih dahulu atau pastikan folder venv ada.
     goto end
 )
+
+:: Membersihkan folder build dan dist lama
+echo Membersihkan folder build dan dist lama jika ada...
+if exist build (
+    echo Menghapus folder build...
+    rmdir /s /q build
+)
+if exist dist (
+    echo Menghapus folder dist...
+    rmdir /s /q dist
+)
+if exist build_old (
+    echo Menghapus folder build_old...
+    rmdir /s /q build_old
+)
+if exist dist_old (
+    echo Menghapus folder dist_old...
+    rmdir /s /q dist_old
+)
+echo.
 
 :: Mengaktifkan Virtual Environment
 echo [1/3] Mengaktifkan virtual environment...
@@ -22,7 +42,7 @@ if %errorlevel% neq 0 (
 
 :: Menjalankan PyInstaller
 echo [2/3] Memulai kompilasi dengan PyInstaller...
-pyinstaller --clean Inter-SmartPLS.spec
+pyinstaller -y --clean Inter-SmartPLS.spec
 if %errorlevel% neq 0 (
     echo [ERROR] Proses kompilasi PyInstaller gagal!
     goto deactivate_env
